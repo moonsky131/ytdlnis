@@ -1,7 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <navigation xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    app:startDestination="@id/downloadBottomSheetDialog">
+    app:startDestination="@id/quickDownloadBottomSheetDialog">
+    <dialog
+        android:id="@+id/quickDownloadBottomSheetDialog"
+        android:name="com.deniscerri.ytdl.ui.downloadcard.QuickDownloadBottomSheetDialog"
+        android:label="QuickDownloadBottomSheetDialog">
+        <action
+            android:id="@+id/action_quickDownloadBottomSheetDialog_to_downloadBottomSheetDialog"
+            app:destination="@id/downloadBottomSheetDialog"
+            app:launchSingleTop="true"
+            app:popUpTo="@id/quickDownloadBottomSheetDialog"
+            app:popUpToInclusive="true" />
+        <action
+            android:id="@+id/action_quickDownloadBottomSheetDialog_to_selectPlaylistItemsDialog"
+            app:destination="@id/selectPlaylistItemsDialog"
+            app:launchSingleTop="true"
+            app:popUpTo="@id/quickDownloadBottomSheetDialog"
+            app:popUpToInclusive="true" />
+    </dialog>
     <dialog
         android:id="@+id/downloadBottomSheetDialog"
         android:name="com.deniscerri.ytdl.ui.downloadcard.DownloadBottomSheetDialog"

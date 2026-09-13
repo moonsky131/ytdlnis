@@ -92,20 +92,10 @@
 
                 <com.google.android.material.button.MaterialButton
                     style="@style/Widget.MaterialComponents.ExtendedFloatingActionButton.Icon"
-                    android:id="@+id/download_music"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    app:cornerRadius="10dp"
-                    app:backgroundTint="@color/light_grey"
-                    android:layout_marginLeft="10dp"
-                    />
-
-                <com.google.android.material.button.MaterialButton
-                    style="@style/Widget.MaterialComponents.ExtendedFloatingActionButton.Icon"
-                    android:id="@+id/download_video"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    app:cornerRadius="10dp"
+                    android:id="@+id/download_button"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    app:cornerRadius="22dp"
                     app:backgroundTint="@color/light_grey"
                     android:layout_marginLeft="10dp"
                     />

@@ -87,16 +87,14 @@ class HomeAdapter(onItemClickListener: OnItemClickListener, activity: Activity) 
 
         // BUTTONS ----------------------------------
         val videoURL = video.url
-        val musicBtn = card.findViewById<MaterialButton>(R.id.download_music)
-        musicBtn.tag = "$videoURL##audio"
-        musicBtn.setTag(R.id.cancelDownload, "false")
-        musicBtn.setOnClickListener { onItemClickListener.onButtonClick(video, DownloadType.audio) }
-        musicBtn.setOnLongClickListener{ onItemClickListener.onLongButtonClick(video, DownloadType.audio); true}
-        val videoBtn = card.findViewById<MaterialButton>(R.id.download_video)
-        videoBtn.tag = "$videoURL##video"
-        videoBtn.setTag(R.id.cancelDownload, "false")
-        videoBtn.setOnClickListener { onItemClickListener.onButtonClick(video, DownloadType.video) }
-        videoBtn.setOnLongClickListener{ onItemClickListener.onLongButtonClick(video, DownloadType.video); true}
+        val downloadBtn = card.findViewById<MaterialButton>(R.id.download_button)
+        downloadBtn?.tag = "$videoURL##download"
+        downloadBtn?.setTag(R.id.cancelDownload, "false")
+        val preferredType = runCatching {
+            DownloadType.valueOf(sharedPreferences.getString("preferred_download_type", "video")!!)
+        }.getOrDefault(DownloadType.video)
+        downloadBtn?.setOnClickListener { onItemClickListener.onButtonClick(video, preferredType) }
+        downloadBtn?.setOnLongClickListener { onItemClickListener.onLongButtonClick(video, preferredType); true }
 
 
         // PROGRESS BAR ----------------------------------------------------

@@ -15,10 +15,12 @@ internal class StreamGobbler(private val buffer: StringBuffer, private val strea
 
     override fun run() {
         try {
-            val `in`: Reader = InputStreamReader(stream, StandardCharsets.UTF_8)
-            var nextChar: Int
-            while (`in`.read().also { nextChar = it } != -1) {
-                buffer.append(nextChar.toChar())
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            val reader = java.io.BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8), 8192)
+            val chunk = CharArray(4096)
+            var readCount: Int
+            while (reader.read(chunk, 0, chunk.size).also { readCount = it } != -1) {
+                buffer.append(chunk, 0, readCount)
             }
         } catch (e: IOException) {
             Log.e(TAG, "failed to read stream", e)

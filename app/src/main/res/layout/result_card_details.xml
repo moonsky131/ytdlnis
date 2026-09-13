@@ -27,7 +27,7 @@
                 android:layout_height="match_parent"
                 android:keepScreenOn="true"
                 app:layout_constraintTop_toTopOf="parent"
-                app:resize_mode="fixed_height"
+                app:resize_mode="fit"
                 app:use_controller="true" />
 
         </com.google.android.material.card.MaterialCardView>

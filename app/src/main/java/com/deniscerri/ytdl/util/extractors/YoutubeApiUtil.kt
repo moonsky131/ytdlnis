@@ -17,12 +17,14 @@ class YoutubeApiUtil(context: Context) {
     fun getTrending(): ArrayList<ResultItem> {
         val items = arrayListOf<ResultItem>()
         val key = sharedPreferences.getString("api_key", "")!!
-        val url = "https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&videoCategoryId=10&regionCode=${countryCode}&maxResults=25&key=$key"
+        val categories = listOf("", "&videoCategoryId=10", "&videoCategoryId=20", "&videoCategoryId=24", "&videoCategoryId=28")
+        val categoryParam = categories.random()
+        val url = "https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular${categoryParam}&regionCode=${countryCode}&maxResults=30&key=$key"
         //short data
         val res = NetworkUtil.genericRequest(url)
         //extra data from the same videos
         val contentDetails =
-            NetworkUtil.genericRequest("https://www.googleapis.com/youtube/v3/videos?part=contentDetails&chart=mostPopular&videoCategoryId=10&regionCode=${countryCode}&maxResults=25&key=$key")
+            NetworkUtil.genericRequest("https://www.googleapis.com/youtube/v3/videos?part=contentDetails&chart=mostPopular${categoryParam}&regionCode=${countryCode}&maxResults=30&key=$key")
         if (!contentDetails.has("items")) return ArrayList()
         val dataArray = res.getJSONArray("items")
         val extraDataArray = contentDetails.getJSONArray("items")

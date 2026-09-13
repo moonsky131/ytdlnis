@@ -46,6 +46,7 @@ class NotificationUtil(var context: Context) {
     private val resources: Resources = context.resources
 
     private val canPostPromotedNotifications = Build.VERSION.SDK_INT >= 36 && notificationManager.canPostPromotedNotifications()
+    private val lastNotificationUpdateTimes = java.util.concurrent.ConcurrentHashMap<Int, Long>()
 
     fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -111,7 +112,7 @@ class NotificationUtil(var context: Context) {
     }
 
     fun createDefaultWorkerNotification() : Notification {
-        val notificationBuilder = getBuilder(DOWNLOAD_WORKER_CHANNEL_ID)
+        val notificationBuilder = getBuilder(DOWNLOAD_SERVICE_CHANNEL_ID)
 
         return notificationBuilder
             .setContentTitle(resources.getString(R.string.downloading))
@@ -125,8 +126,7 @@ class NotificationUtil(var context: Context) {
             )
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setGroup(DOWNLOAD_RUNNING_NOTIFICATION_ID.toString())
-            .setGroupSummary(true)
+            .setProgress(PROGRESS_MAX, PROGRESS_CURR, true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .clearActions()
             .build()
@@ -435,9 +435,29 @@ class NotificationUtil(var context: Context) {
         notificationManager.notify(id, notification)
     }
 
-    @SuppressLint("MissingPermission")
     fun updateDownloadNotification(
         id: Int,
+        desc: String,
+        progressRaw: Int,
+        queue: Int,
+        title: String?,
+        channel : String
+    ) {
+        updateDownloadNotification(
+            notificationId = id,
+            itemId = id.toLong(),
+            desc = desc,
+            progressRaw = progressRaw,
+            queue = queue,
+            title = title,
+            channel = channel
+        )
+    }
+
+    @SuppressLint("MissingPermission")
+    fun updateDownloadNotification(
+        notificationId: Int,
+        itemId: Long,
         desc: String,
         progressRaw: Int,
         queue: Int,
@@ -449,27 +469,37 @@ class NotificationUtil(var context: Context) {
             progress = progressRaw
         }
 
+        val now = System.currentTimeMillis()
+        val lastUpdate = lastNotificationUpdateTimes[notificationId] ?: 0L
+        val isTerminalState = progressRaw <= 0 || progressRaw >= 100
+        if (!isTerminalState && (now - lastUpdate < 800L)) {
+            return
+        }
+        lastNotificationUpdateTimes[notificationId] = now
+
         var contentText = ""
         if (queue > 1) contentText += """${queue - 1} ${resources.getString(R.string.items_left)}""" + "\n"
         contentText += desc.replace("\\[.*?\\] ".toRegex(), "")
 
         val pauseIntent = Intent(context, PauseDownloadNotificationReceiver::class.java)
-        pauseIntent.putExtra("itemID", id)
+        pauseIntent.putExtra("itemID", itemId.toInt())
+        pauseIntent.putExtra("notificationID", notificationId)
         pauseIntent.putExtra("title", title)
         val pauseNotificationPendingIntent = PendingIntent.getBroadcast(
             context,
-            id,
+            itemId.toInt(),
             pauseIntent,
-            PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val cancelIntent = Intent(context, CancelDownloadNotificationReceiver::class.java)
-        cancelIntent.putExtra("itemID", id)
+        cancelIntent.putExtra("itemID", itemId.toInt())
+        cancelIntent.putExtra("notificationID", notificationId)
         val cancelNotificationPendingIntent = PendingIntent.getBroadcast(
             context,
-            id,
+            itemId.toInt(),
             cancelIntent,
-            PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         try {
@@ -512,17 +542,18 @@ class NotificationUtil(var context: Context) {
                     .addAction(pauseAction)
                     .addAction(cancelAction)
 
-                notificationManager.notify(id, builder.build())
+                notificationManager.notify(notificationId, builder.build())
             } else {
                 val notificationBuilder = getBuilder(channel)
                 notificationBuilder.setProgress(100, progress, (progress == 0 || progress == 100))
                     .setContentTitle(title)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
-                    .setGroup(DOWNLOAD_RUNNING_NOTIFICATION_ID.toString())
+                    .setOngoing(true)
+                    .setOnlyAlertOnce(true)
                     .clearActions()
                     .addAction(0, resources.getString(R.string.pause), pauseNotificationPendingIntent)
                     .addAction(0, resources.getString(R.string.cancel), cancelNotificationPendingIntent)
-                notificationManager.notify(id, notificationBuilder.build())
+                notificationManager.notify(notificationId, notificationBuilder.build())
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -537,13 +568,16 @@ class NotificationUtil(var context: Context) {
         title: String?,
         channel : String
     ) {
+        val now = System.currentTimeMillis()
+        val lastUpdate = lastNotificationUpdateTimes[id] ?: 0L
+        val isTerminalState = progress <= 0 || progress >= 100
+        if (!isTerminalState && (now - lastUpdate < 800L)) {
+            return
+        }
+        lastNotificationUpdateTimes[id] = now
 
-        val notificationBuilder = getBuilder(channel)
-        var contentText = ""
-        contentText += desc.replace("\\[.*?\\] ".toRegex(), "")
-
-        val cancelIntent = Intent(context, CancelDownloadNotificationReceiver::class.java)
-        cancelIntent.putExtra("itemID", id)
+        val cancelIntent = Intent(context, CancelWorkReceiver::class.java)
+        cancelIntent.putExtra("tag", "terminal")
         val cancelNotificationPendingIntent = PendingIntent.getBroadcast(
             context,
             id,
@@ -551,21 +585,22 @@ class NotificationUtil(var context: Context) {
             PendingIntent.FLAG_IMMUTABLE
         )
 
-        try {
-            notificationBuilder.setProgress(100, progress, progress == 0)
-                .setContentTitle(title)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
-                .setGroup(DOWNLOAD_TERMINAL_RUNNING_NOTIFICATION_ID.toString())
-                .clearActions()
-                .addAction(0, resources.getString(R.string.cancel), cancelNotificationPendingIntent)
-            notificationManager.notify(id, notificationBuilder.build())
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        val notificationBuilder = getBuilder(channel)
+        notificationBuilder.setProgress(100, progress, (progress == 0 || progress == 100))
+            .setContentTitle(title)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(desc))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .clearActions()
+            .addAction(0, resources.getString(R.string.cancel), cancelNotificationPendingIntent)
+        notificationManager.notify(id, notificationBuilder.build())
     }
 
     fun cancelDownloadNotification(id: Int) {
         notificationManager.cancel(id)
+        if (id != DOWNLOAD_RUNNING_NOTIFICATION_ID) {
+            notificationManager.cancel(DOWNLOAD_RUNNING_NOTIFICATION_ID)
+        }
     }
 
     fun cancelErroredNotification(id: Int) {

@@ -14,10 +14,12 @@ import kotlinx.coroutines.launch
 class CancelDownloadNotificationReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
         val id = intent.getIntExtra("itemID", 0)
+        val notifId = intent.getIntExtra("notificationID", id)
         if (id > 0) {
             runCatching {
                 val notificationUtil = NotificationUtil(c)
                 RuntimeManager.getInstance().destroyProcessById(id.toString())
+                notificationUtil.cancelDownloadNotification(notifId)
                 notificationUtil.cancelDownloadNotification(id)
                 val dbManager = DBManager.getInstance(c)
                 CoroutineScope(Dispatchers.IO).launch{

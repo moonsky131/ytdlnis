@@ -23,20 +23,28 @@ internal class StreamProcessExtractor(
         start()
     }
 
+    private var lastProgressLineTime = 0L
+
     override fun run() {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
         try {
+            val bufferedStream = if (stream is java.io.BufferedInputStream) stream else java.io.BufferedInputStream(stream, 8192)
             val currentLine = StringBuilder()
             var nextChar: Int
 
-            while (stream.read().also { nextChar = it } != -1) {
+            while (bufferedStream.read().also { nextChar = it } != -1) {
                 val c = nextChar.toChar()
 
                 if (c == '\r' || c == '\n') {
                     if (currentLine.isNotEmpty()) {
                         val line = currentLine.toString()
+                        val now = System.currentTimeMillis()
 
-                        // 1. Process progress updates for UI callback
-                        processOutputLine(line)
+                        // 1. Process progress updates for UI callback (throttled for rapid \r carriage returns)
+                        if (c == '\n' || now - lastProgressLineTime >= 100L) {
+                            lastProgressLineTime = now
+                            processOutputLine(line)
+                        }
 
                         // 2. Prevent OOM: Don't store rapid \r progress lines in the permanent buffer.
                         // Only save actual newlines or capped logs for debugging.

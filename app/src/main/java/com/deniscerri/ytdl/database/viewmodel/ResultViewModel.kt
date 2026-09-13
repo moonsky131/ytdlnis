@@ -148,15 +148,18 @@ class ResultViewModel(private val application: Application) : AndroidViewModel(a
     }
 
 
-    fun getHomeRecommendations() = viewModelScope.launch(Dispatchers.IO){
-        val homeRecommendations = sharedPreferences.getString("recommendations_home", "")
+    fun getHomeRecommendations(force: Boolean = false) = viewModelScope.launch(Dispatchers.IO){
+        var homeRecommendations = sharedPreferences.getString("recommendations_home", "")
         val customHomeRecommendations = sharedPreferences.getString("custom_home_recommendation_url", "")
         val emptyCustomRecommendations = customHomeRecommendations.isNullOrBlank() && homeRecommendations == "custom"
+        if (force && (homeRecommendations.isNullOrBlank() || emptyCustomRecommendations)) {
+            homeRecommendations = "newpipe"
+        }
 
         if (!homeRecommendations.isNullOrBlank() && !emptyCustomRecommendations){
             kotlin.runCatching {
                 uiState.update {it.copy(processing = true)}
-                repository.getHomeRecommendations()
+                repository.getHomeRecommendations(force = force)
                 uiState.update {it.copy(processing = false)}
             }.onFailure { t ->
                 uiState.update {it.copy(

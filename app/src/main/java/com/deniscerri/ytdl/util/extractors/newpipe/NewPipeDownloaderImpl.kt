@@ -10,8 +10,8 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import java.util.concurrent.TimeUnit
 
 
-class NewPipeDownloaderImpl(builder: OkHttpClient.Builder) : Downloader() {
-    private var client: OkHttpClient = builder.readTimeout(30, TimeUnit.SECONDS).build()
+class NewPipeDownloaderImpl(private val client: OkHttpClient) : Downloader() {
+    constructor(builder: OkHttpClient.Builder) : this(builder.readTimeout(30, TimeUnit.SECONDS).build())
 
     override fun execute(request: Request): Response {
         val httpMethod = request.httpMethod()

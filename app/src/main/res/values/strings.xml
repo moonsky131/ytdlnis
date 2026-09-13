@@ -584,4 +584,16 @@
     <plurals name="every_days"><item quantity="one">Every day</item><item quantity="other">Every %d days</item></plurals>
     <plurals name="every_weeks"><item quantity="one">Every week</item><item quantity="other">Every %d weeks</item></plurals>
     <plurals name="every_months"><item quantity="one">Every month</item><item quantity="other">Every %d months</item></plurals>
+    <string name="music">Music</string>
+    <string name="video_title">Video</string>
+    <string name="snaptube_quick_download">Quick Download</string>
+    <string name="advanced_options">Advanced Options</string>
+    <string name="resolving_formats">Resolving available qualities…</string>
+    <string name="downloading_format">Downloading %1$s (%2$s)</string>
+    <string name="badge_fhd">FHD</string>
+    <string name="badge_hd">HD</string>
+    <string name="badge_hq">HQ</string>
+    <string name="badge_fast">FAST</string>
+    <string name="share_dialog_style">Shared link download style</string>
+    <string name="share_dialog_style_summary">Choose between Snaptube-style quick grid or classic tabbed configuration</string>
 </resources>

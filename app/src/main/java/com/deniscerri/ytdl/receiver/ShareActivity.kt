@@ -180,39 +180,58 @@ class ShareActivity : BaseActivity() {
             val type = intent.getStringExtra("TYPE")
             val background = intent.getBooleanExtra("BACKGROUND", ai.metaData?.getBoolean("quick_run_background", false) == true)
 
-            lifecycleScope.launch {
-                val result: ResultItem
-                val existingResults = withContext(Dispatchers.IO){
-                    resultViewModel.getAllByURL(inputQuery)
+            val downloadType = runCatching {
+                if (!type.isNullOrBlank()) DownloadType.valueOf(type.lowercase())
+                else downloadViewModel.getDownloadType(url = inputQuery)
+            }.getOrDefault(DownloadType.video)
+            if (sharedPreferences.getBoolean("download_card", true) && !background){
+                val initialResult = downloadViewModel.createEmptyResultItem(inputQuery)
+                val extraSubject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
+                val extraTitle = intent.getStringExtra(Intent.EXTRA_TITLE)
+                val initialTitle = extraSubject?.takeIf { it.isNotBlank() } ?: extraTitle?.takeIf { it.isNotBlank() }
+                if (initialTitle != null) {
+                    initialResult.title = initialTitle
                 }
 
-                if (existingResults.isEmpty() || existingResults.size > 1) {
-                    resultViewModel.deleteAll()
-                    result = downloadViewModel.createEmptyResultItem(inputQuery)
-                }else{
-                    result = existingResults.first()
+                downloadCardViewModel.setResultItem(initialResult)
+                downloadCardViewModel.setDownloadItem(null)
+                val bundle = Bundle()
+                bundle.putSerializable("type", downloadType)
+                val shareStyle = sharedPreferences.getString("share_dialog_style", "snaptube")
+                val graph = navController.navInflater.inflate(R.navigation.share_nav_graph)
+                if (shareStyle == "classic") {
+                    graph.setStartDestination(R.id.downloadBottomSheetDialog)
+                } else {
+                    graph.setStartDestination(R.id.quickDownloadBottomSheetDialog)
                 }
+                navController.setGraph(graph, bundle)
 
-                val downloadType = DownloadType.valueOf(type ?: downloadViewModel.getDownloadType(url = result.url).toString())
-                if (sharedPreferences.getBoolean("download_card", true) && !background){
-
-                    downloadCardViewModel.setResultItem(result)
-                    downloadCardViewModel.setDownloadItem(null)
-                    val bundle = Bundle()
-                    bundle.putSerializable("type", downloadType)
-                    navController.setGraph(R.navigation.share_nav_graph, bundle)
-                }else{
-                    Toast.makeText(this@ShareActivity, "${getString(R.string.downloading)} $inputQuery", Toast.LENGTH_SHORT).show()
-
-                    lifecycleScope.launch(Dispatchers.IO){
-                        val downloadItem = downloadViewModel.createDownloadItemFromResult(
-                            result = result,
-                            givenType = downloadType)
-
-                        downloadViewModel.queueDownloads(listOf(downloadItem))
+                lifecycleScope.launch {
+                    val existingResults = withContext(Dispatchers.IO){
+                        resultViewModel.getAllByURL(inputQuery)
                     }
-                    this@ShareActivity.finish()
+
+                    if (existingResults.isNotEmpty() && existingResults.size == 1 && existingResults.first().title.isNotBlank()) {
+                        val cached = existingResults.first()
+                        downloadCardViewModel.setResultItem(cached)
+                        resultViewModel.updateResultData.emit(listOf(cached))
+                    } else {
+                        resultViewModel.deleteAll()
+                        resultViewModel.updateItemData(initialResult)
+                    }
                 }
+            } else {
+                Toast.makeText(this@ShareActivity, "${getString(R.string.downloading)} $inputQuery", Toast.LENGTH_SHORT).show()
+
+                lifecycleScope.launch(Dispatchers.IO){
+                    val result = downloadViewModel.createEmptyResultItem(inputQuery)
+                    val downloadItem = downloadViewModel.createDownloadItemFromResult(
+                        result = result,
+                        givenType = downloadType)
+
+                    downloadViewModel.queueDownloads(listOf(downloadItem))
+                }
+                this@ShareActivity.finish()
             }
         }
     }

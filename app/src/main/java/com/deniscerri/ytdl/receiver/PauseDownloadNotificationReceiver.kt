@@ -16,10 +16,12 @@ class PauseDownloadNotificationReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
         val result = goAsync()
         val id = intent.getIntExtra("itemID", 0)
+        val notifId = intent.getIntExtra("notificationID", id)
         if (id != 0) {
             runCatching {
                 val title = intent.getStringExtra("title")
                 val notificationUtil = NotificationUtil(c)
+                notificationUtil.cancelDownloadNotification(notifId)
                 notificationUtil.cancelDownloadNotification(id)
                 RuntimeManager.getInstance().destroyProcessById(id.toString())
                 val dbManager = DBManager.getInstance(c)

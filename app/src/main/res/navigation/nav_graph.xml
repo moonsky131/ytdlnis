@@ -31,6 +31,9 @@
             android:id="@+id/action_homeFragment_to_downloadBottomSheetDialog"
             app:destination="@id/downloadBottomSheetDialog" />
         <action
+            android:id="@+id/action_homeFragment_to_quickDownloadBottomSheetDialog"
+            app:destination="@id/quickDownloadBottomSheetDialog" />
+        <action
             android:id="@+id/action_homeFragment_to_downloadMultipleBottomSheetDialog2"
             app:destination="@id/downloadMultipleBottomSheetDialog2" />
         <action
@@ -171,6 +174,16 @@
         <action
             android:id="@+id/action_downloadBottomSheetDialog_to_cutVideoBottomSheetDialog"
             app:destination="@id/cutVideoBottomSheetDialog" />
+    </dialog>
+    <dialog
+        android:id="@+id/quickDownloadBottomSheetDialog"
+        android:name="com.deniscerri.ytdl.ui.downloadcard.QuickDownloadBottomSheetDialog"
+        android:label="QuickDownloadBottomSheetDialog">
+        <action
+            android:id="@+id/action_quickDownloadBottomSheetDialog_to_downloadBottomSheetDialog"
+            app:destination="@id/downloadBottomSheetDialog"
+            app:popUpTo="@id/quickDownloadBottomSheetDialog"
+            app:popUpToInclusive="true" />
     </dialog>
     <dialog
         android:id="@+id/downloadMultipleBottomSheetDialog2"

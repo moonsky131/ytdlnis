@@ -272,7 +272,7 @@ object RuntimeManager {
         if (request.buildCommand().contains("libaria2c.so")) {
             request.addOption(
                 "--external-downloader-args",
-                "aria2c:--ca-certificate=$ENV_SSL_CERT_FILE"
+                "aria2c:--ca-certificate=$ENV_SSL_CERT_FILE --summary-interval=1"
             )
         }
 
@@ -280,7 +280,7 @@ object RuntimeManager {
             request.addOption("--no-cache-dir")
         }
 
-        request.addOption("--progress-delta", 0.1)
+        request.addOption("--progress-delta", 1.0)
 
         return mutableListOf(pythonLocation.executable.absolutePath, ytdlpPath!!.absolutePath) + request.buildCommand()
     }

@@ -977,7 +977,8 @@ class YTDLPUtil(private val context: Context, private val commandTemplateDao: Co
         }
 
         val concurrentFragments = sharedPreferences.getInt("concurrent_fragments", 1)
-        if (concurrentFragments > 1) request.addOption("-N", concurrentFragments)
+        val actualFragments = if (downloadItem.type == DownloadType.audio && concurrentFragments <= 1) 4 else concurrentFragments
+        if (actualFragments > 1 && !aria2) request.addOption("-N", actualFragments)
 
         val retries = sharedPreferences.getString("retries", "")!!
         val fragmentRetries = sharedPreferences.getString("fragment_retries", "")!!
@@ -1179,6 +1180,7 @@ class YTDLPUtil(private val context: Context, private val commandTemplateDao: Co
                 }
 
                 request.addOption("-x")
+                request.addOption("--postprocessor-args", "ExtractAudio:-threads 4")
                 val ext = downloadItem.container
 
                 val formatSorting = mutableListOf<String>()

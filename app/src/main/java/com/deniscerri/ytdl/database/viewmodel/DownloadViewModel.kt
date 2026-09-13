@@ -39,6 +39,8 @@ import com.deniscerri.ytdl.database.repository.DownloadRepository
 import com.deniscerri.ytdl.database.repository.HistoryRepository
 import com.deniscerri.ytdl.database.repository.ResultRepository
 import com.deniscerri.ytdl.ui.downloadcard.MultipleItemFormatTuple
+import com.deniscerri.ytdl.util.Extensions.getIDFromYoutubeURL
+import com.deniscerri.ytdl.util.Extensions.isYoutubeURL
 import com.deniscerri.ytdl.util.Extensions.needsDataUpdating
 import com.deniscerri.ytdl.util.Extensions.toListString
 import com.deniscerri.ytdl.util.FileUtil
@@ -398,14 +400,16 @@ class DownloadViewModel(private val application: Application) : AndroidViewModel
     }
 
     fun createEmptyResultItem(url: String) : ResultItem {
+        val id = if (url.isYoutubeURL()) url.getIDFromYoutubeURL() else null
+        val thumb = if (!id.isNullOrBlank()) "https://i.ytimg.com/vi/$id/hqdefault.jpg" else ""
         return ResultItem(
             0,
             url,
             "",
             "",
             "",
-            "",
-            "",
+            thumb,
+            if (url.isYoutubeURL()) "youtube" else "",
             "",
             arrayListOf(),
             "",

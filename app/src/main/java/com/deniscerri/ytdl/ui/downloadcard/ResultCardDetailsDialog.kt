@@ -6,21 +6,29 @@ import android.app.DownloadManager
 import android.content.Context
 import android.content.DialogInterface
 import android.content.SharedPreferences
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.DisplayMetrics
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.WindowManager
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.os.bundleOf
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
@@ -90,6 +98,9 @@ class ResultCardDetailsDialog : BottomSheetDialogFragment(), GenericDownloadAdap
     private lateinit var dialogView : View
     private lateinit var item: ResultItem
 
+    private var fullscreenDialog: Dialog? = null
+    private var isFullscreenMode: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         notificationUtil = NotificationUtil(requireActivity())
@@ -126,11 +137,15 @@ class ResultCardDetailsDialog : BottomSheetDialogFragment(), GenericDownloadAdap
         dialog.window?.navigationBarColor = SurfaceColors.SURFACE_1.getColor(requireActivity())
 
         dialog.setOnShowListener {
-            val behavior = BottomSheetBehavior.from(dialogView.parent as View)
-            val displayMetrics = DisplayMetrics()
-            requireActivity().windowManager.defaultDisplay.getMetrics(displayMetrics)
-            if(resources.getBoolean(R.bool.isTablet) || resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE){
-                dialog.setFullScreen()
+            runCatching {
+                (dialogView.parent as? View)?.let { parentView ->
+                    val behavior = BottomSheetBehavior.from(parentView)
+                    val displayMetrics = DisplayMetrics()
+                    activity?.windowManager?.defaultDisplay?.getMetrics(displayMetrics)
+                    if(resources.getBoolean(R.bool.isTablet) || resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE){
+                        dialog.setFullScreen()
+                    }
+                }
             }
         }
     }
@@ -273,6 +288,13 @@ class ResultCardDetailsDialog : BottomSheetDialogFragment(), GenericDownloadAdap
         videoView = view.findViewById(R.id.video_view)
         val player = VideoPlayerUtil.buildPlayer(requireContext())
         videoView.player = player
+        videoView.setFullscreenButtonClickListener { isFullScreen ->
+            if (isFullScreen) {
+                enterFullscreen()
+            } else {
+                exitFullscreen(fromButtonClick = true)
+            }
+        }
 
         val loading = view.findViewById<ProgressBar>(R.id.loading)
 
@@ -359,7 +381,114 @@ class ResultCardDetailsDialog : BottomSheetDialogFragment(), GenericDownloadAdap
     }
 
 
+    private fun enterFullscreen() {
+        if (isFullscreenMode) return
+        val currentContext = context ?: return
+        val currentActivity = activity ?: return
+
+        isFullscreenMode = true
+
+        val dialog = object : Dialog(currentContext, android.R.style.Theme_Black_NoTitleBar_Fullscreen) {
+            @Deprecated("Deprecated in Java")
+            override fun onBackPressed() {
+                exitFullscreen(fromButtonClick = false)
+            }
+        }
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.BLACK))
+            addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            WindowCompat.setDecorFitsSystemWindows(this, false)
+            val insetsController = WindowCompat.getInsetsController(this, decorView)
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
+            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                attributes.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+
+        dialog.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                exitFullscreen(fromButtonClick = false)
+                true
+            } else {
+                false
+            }
+        }
+
+        (videoView.parent as? ViewGroup)?.removeView(videoView)
+        dialog.setContentView(
+            videoView,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val player = videoView.player
+        val isVertical = player != null && player.videoSize.height > player.videoSize.width && player.videoSize.width > 0
+        if (!isVertical) {
+            currentActivity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+
+        dialog.show()
+        fullscreenDialog = dialog
+    }
+
+    private fun exitFullscreen(fromButtonClick: Boolean = false) {
+        if (!isFullscreenMode) return
+        isFullscreenMode = false
+
+        if (!fromButtonClick) {
+            val fullscreenBtn = videoView.findViewById<ImageButton>(androidx.media3.ui.R.id.exo_fullscreen)
+            if (fullscreenBtn != null) {
+                fullscreenBtn.performClick()
+                return
+            }
+        }
+
+        val dialog = fullscreenDialog
+        fullscreenDialog = null
+        dialog?.dismiss()
+
+        (videoView.parent as? ViewGroup)?.removeView(videoView)
+        val frameLayout = (view ?: dialogView).findViewById<ViewGroup>(R.id.frame_layout)
+        frameLayout?.addView(
+            videoView,
+            0,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            if (!isFullscreenMode && videoView.player?.isPlaying == true) {
+                val fullscreenBtn = videoView.findViewById<ImageButton>(androidx.media3.ui.R.id.exo_fullscreen)
+                if (fullscreenBtn != null) {
+                    fullscreenBtn.performClick()
+                } else {
+                    enterFullscreen()
+                }
+            }
+        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
+            if (isFullscreenMode) {
+                exitFullscreen(fromButtonClick = false)
+            }
+        }
+    }
+
     private fun cleanUp(){
+        if (isFullscreenMode) {
+            exitFullscreen(fromButtonClick = true)
+        }
+        fullscreenDialog?.dismiss()
+        fullscreenDialog = null
         kotlin.runCatching {
             videoView.player?.stop()
             videoView.player?.release()

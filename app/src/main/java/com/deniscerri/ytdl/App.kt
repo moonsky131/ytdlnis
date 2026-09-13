@@ -20,6 +20,7 @@ import com.deniscerri.ytdl.util.Extensions.hasReachedEnd
 import com.deniscerri.ytdl.util.NotificationUtil
 import com.deniscerri.ytdl.util.ObserveAlarmScheduler
 import com.deniscerri.ytdl.util.ThemeUtil
+import com.deniscerri.ytdl.util.extractors.newpipe.NewPipeUtil
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class App : Application(), DefaultLifecycleObserver {
             try {
                 createNotificationChannels()
                 initLibraries()
+                NewPipeUtil.initNewPipe(this@App)
 
                 val appVer = sharedPreferences.getString("version", "")!!
                 if(appVer.isEmpty() || appVer != BuildConfig.VERSION_NAME){

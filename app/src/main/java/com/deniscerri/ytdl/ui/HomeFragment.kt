@@ -83,9 +83,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
 import kotlin.math.sign
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 
 class HomeFragment : Fragment(), HomeAdapter.OnItemClickListener, SearchSuggestionsAdapter.OnItemClickListener, OnClickListener {
+    private var swipeRefreshLayout: SwipeRefreshLayout? = null
     private var inputQueries: MutableList<String>? = null
     private lateinit var homeAdapter: HomeAdapter
     private var totalCount: Int = 0
@@ -188,6 +190,34 @@ class HomeFragment : Fragment(), HomeAdapter.OnItemClickListener, SearchSuggesti
 
         shimmerCards = view.findViewById(R.id.shimmer_results_framelayout)
 
+        swipeRefreshLayout = view.findViewById(R.id.swipe_refresh)
+        swipeRefreshLayout?.setColorSchemeColors(
+            MaterialColors.getColor(requireContext(), R.attr.colorPrimary, Color.BLACK)
+        )
+        swipeRefreshLayout?.setProgressBackgroundColorSchemeColor(
+            MaterialColors.getColor(requireContext(), R.attr.colorSurfaceContainerHigh, Color.WHITE)
+        )
+        swipeRefreshLayout?.setOnChildScrollUpCallback { _, _ ->
+            recyclerView?.canScrollVertically(-1) == true
+        }
+        swipeRefreshLayout?.setOnRefreshListener {
+            lifecycleScope.launch {
+                withContext(Dispatchers.IO) {
+                    resultViewModel.cancelParsingQueries()
+                }
+                if (queryList.isNotEmpty() && !searchBar?.text.isNullOrBlank()) {
+                    startSearch()
+                } else {
+                    queryList.clear()
+                    searchBar?.setText("")
+                    showDownloadAllFab = false
+                    downloadAllFab?.visibility = GONE
+                    downloadSelectedFab?.visibility = GONE
+                    resultViewModel.getHomeRecommendations(force = true)
+                }
+            }
+        }
+
 
 
         searchSuggestionsAdapter = SearchSuggestionsAdapter(
@@ -213,6 +243,7 @@ class HomeFragment : Fragment(), HomeAdapter.OnItemClickListener, SearchSuggesti
         homeAdapter.addLoadStateListener { loadStates ->
             val isNotLoading = loadStates.refresh is androidx.paging.LoadState.NotLoading
             if (isNotLoading) {
+                swipeRefreshLayout?.isRefreshing = false
                 val size = resultViewModel.totalCount.value;
                 val firstResult = resultViewModel.firstResult.value;
 
@@ -345,6 +376,7 @@ class HomeFragment : Fragment(), HomeAdapter.OnItemClickListener, SearchSuggesti
                         shimmerCards!!.startShimmer()
                         shimmerCards!!.visibility = VISIBLE
                     }else{
+                        swipeRefreshLayout?.isRefreshing = false
                         recyclerView?.setPadding(0,0,0,100)
                         shimmerCards!!.stopShimmer()
                         shimmerCards!!.visibility = GONE
@@ -554,7 +586,8 @@ class HomeFragment : Fragment(), HomeAdapter.OnItemClickListener, SearchSuggesti
                             resultViewModel.cancelParsingQueries()
                         }
                     }
-                    resultViewModel.getHomeRecommendations()
+                    queryList.clear()
+                    resultViewModel.getHomeRecommendations(force = true)
                     searchBar!!.setText("")
                     showDownloadAllFab = false
                     downloadAllFab!!.visibility = GONE
@@ -777,9 +810,10 @@ class HomeFragment : Fragment(), HomeAdapter.OnItemClickListener, SearchSuggesti
         type: DownloadType,
         disableUpdateData : Boolean = false
     ){
-        if(findNavController().currentBackStack.value.firstOrNull {it.destination.id == R.id.downloadBottomSheetDialog} == null &&
-            findNavController().currentDestination?.id == R.id.homeFragment
-            ){
+        val isAlreadyShowing = findNavController().currentBackStack.value.any {
+            it.destination.id == R.id.downloadBottomSheetDialog || it.destination.id == R.id.quickDownloadBottomSheetDialog
+        }
+        if(!isAlreadyShowing && findNavController().currentDestination?.id == R.id.homeFragment){
             //show the fragment if its not in the backstack
             val bundle = Bundle()
             downloadCardViewModel.setResultItem(resultItem)
@@ -788,7 +822,12 @@ class HomeFragment : Fragment(), HomeAdapter.OnItemClickListener, SearchSuggesti
             if (disableUpdateData) {
                 bundle.putBoolean("disableUpdateData", true)
             }
-            findNavController().navigate(R.id.downloadBottomSheetDialog, bundle)
+            val shareStyle = sharedPreferences?.getString("share_dialog_style", "snaptube") ?: "snaptube"
+            if (shareStyle == "classic") {
+                findNavController().navigate(R.id.action_homeFragment_to_downloadBottomSheetDialog, bundle)
+            } else {
+                findNavController().navigate(R.id.action_homeFragment_to_quickDownloadBottomSheetDialog, bundle)
+            }
         }
     }
 

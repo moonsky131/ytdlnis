@@ -62,7 +62,7 @@ class DownloadWorker(
         val workNotif = NotificationUtil(App.Companion.instance).createDefaultWorkerNotification()
 
         return ForegroundInfo(
-            1000000000,
+            NotificationUtil.DOWNLOAD_RUNNING_NOTIFICATION_ID,
             workNotif,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -81,6 +81,7 @@ class DownloadWorker(
         if (workManager.isRunning("download") || isStopped) return Result.Failure()
 
         setForegroundSafely()
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
 
         val parentContext = currentCoroutineContext()
         val workerScope = CoroutineScope(
@@ -180,11 +181,12 @@ class DownloadWorker(
                 items.take(concurrentDownloads).filter {  it.id !in running }
             }
 
-            eligibleDownloads.forEach{downloadItem ->
+            eligibleDownloads.forEachIndexed { index, downloadItem ->
                 priorityItemIDs.remove(downloadItem.id)
 
+                val targetNotificationId = if (index == 0) NotificationUtil.DOWNLOAD_RUNNING_NOTIFICATION_ID else downloadItem.id.toInt()
                 val notification = notificationUtil.createDownloadServiceNotification(openDownloadQueue, downloadItem.title.ifEmpty { downloadItem.url })
-                notificationUtil.notify(downloadItem.id.toInt(), notification)
+                notificationUtil.notify(targetNotificationId, notification)
 
                 workerScope.launch {
                     val processDownloadBlock : suspend () -> Unit = {
@@ -277,31 +279,56 @@ class DownloadWorker(
 
                         runCatching {
                             RuntimeManager.getInstance().destroyProcessById(downloadItem.id.toString())
+                            var lastProgressTime = 0L
+                            var lastNotificationTime = 0L
+                            var lastLogDbTime = 0L
+                            var lastProgressPercent = -1
+
                             RuntimeManager.getInstance().execute(
                                 request = request,
                                 processId = downloadItem.id.toString(),
                                 redirectErrorStream = true,
                                 usingCacheDir = true
                             ) { progress, _, line ->
-                                WorkerEventBus.post(
-                                    WorkerProgress(
-                                        progress.toInt(),
-                                        line,
-                                        downloadItem.id,
-                                        downloadItem.logID
+                                val now = System.currentTimeMillis()
+                                val progressInt = progress.toInt()
+
+                                // 1. Throttle UI EventBus updates (at most once every 250ms or on percent change)
+                                if (now - lastProgressTime >= 250L || progressInt != lastProgressPercent || progressInt >= 100) {
+                                    lastProgressTime = now
+                                    lastProgressPercent = progressInt
+                                    WorkerEventBus.post(
+                                        WorkerProgress(
+                                            progressInt,
+                                            line,
+                                            downloadItem.id,
+                                            downloadItem.logID
+                                        )
                                     )
-                                )
-                                val title: String = downloadItem.title.ifEmpty { downloadItem.url }
-                                notificationUtil.updateDownloadNotification(
-                                    downloadItem.id.toInt(),
-                                    line, progress.toInt(), 0, title,
-                                    NotificationUtil.Companion.DOWNLOAD_SERVICE_CHANNEL_ID
-                                )
-                                CoroutineScope(Dispatchers.IO).launch {
-                                    if (logDownloads) {
+                                }
+
+                                // 2. Throttle System Notifications (at most once every 1000ms, or at 0% / 100%)
+                                if (now - lastNotificationTime >= 1000L || progressInt >= 100 || progressInt == 0) {
+                                    lastNotificationTime = now
+                                    val title: String = downloadItem.title.ifEmpty { downloadItem.url }
+                                    notificationUtil.updateDownloadNotification(
+                                        notificationId = targetNotificationId,
+                                        itemId = downloadItem.id,
+                                        desc = line,
+                                        progressRaw = progressInt,
+                                        queue = 0,
+                                        title = title,
+                                        channel = NotificationUtil.Companion.DOWNLOAD_SERVICE_CHANNEL_ID
+                                    )
+                                }
+
+                                // 3. Throttle SQLite log database writes (at most once every 3000ms instead of dozens of times per second)
+                                logString.append("$line\n")
+                                if (logDownloads && (now - lastLogDbTime >= 3000L || progressInt >= 100)) {
+                                    lastLogDbTime = now
+                                    CoroutineScope(Dispatchers.IO).launch {
                                         logRepo.update(line, logItem.id)
                                     }
-                                    logString.append("$line\n")
                                 }
                             }
                         }.onSuccess {
@@ -468,6 +495,7 @@ class DownloadWorker(
                                 }
 
                                 withContext(Dispatchers.Main) {
+                                    notificationUtil.cancelDownloadNotification(targetNotificationId)
                                     notificationUtil.cancelDownloadNotification(downloadItem.id.toInt())
                                     notificationUtil.createDownloadFinished(
                                         downloadItem.id,
@@ -501,6 +529,7 @@ class DownloadWorker(
                         }.onFailure {
                             FileUtil.deleteConfigFiles(request)
                             withContext(Dispatchers.Main) {
+                                notificationUtil.cancelDownloadNotification(targetNotificationId)
                                 notificationUtil.cancelDownloadNotification(downloadItem.id.toInt())
                             }
                             if (this@DownloadWorker.isStopped) return@onFailure
@@ -525,6 +554,7 @@ class DownloadWorker(
                             tempFileDir.delete()
 
                             Log.e(TAG, context.getString(R.string.failed_download), it)
+                            notificationUtil.cancelDownloadNotification(targetNotificationId)
                             notificationUtil.cancelDownloadNotification(downloadItem.id.toInt())
 
                             downloadItem.status = DownloadRepository.Status.Error.toString()

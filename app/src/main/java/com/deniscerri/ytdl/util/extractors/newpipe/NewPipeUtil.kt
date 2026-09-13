@@ -29,29 +29,60 @@ import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExt
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
+import java.util.Collections
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.*
 import kotlin.coroutines.cancellation.CancellationException
 
 class NewPipeUtil(context: Context) {
     private var sharedPreferences: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
     private val countryCode = sharedPreferences.getString("locale", "")!!.ifEmpty { "US" }
-    private val language = sharedPreferences.getString("app_language", "")!!.ifEmpty { "en" }
-    private val useAppLanguageForMetadata = sharedPreferences.getBoolean("use_app_language_for_metadata", false)
+    private val recentlyShownUrls = Collections.synchronizedSet(LinkedHashSet<String>())
+    private val kioskCache = ConcurrentHashMap<String, List<ResultItem>>()
 
     init {
-        if (useAppLanguageForMetadata) {
-            NewPipe.init(NewPipeDownloaderImpl(OkHttpClient.Builder()),  Localization(language, countryCode))
-        } else {
-            NewPipe.init(NewPipeDownloaderImpl(OkHttpClient.Builder()))
+        initNewPipe(context)
+    }
+
+    companion object {
+        val sharedClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectionPool(okhttp3.ConnectionPool(8, 5, java.util.concurrent.TimeUnit.MINUTES))
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
         }
 
-        YoutubeStreamExtractor.setPoTokenProvider(NewPipePoTokenGenerator())
+        @Volatile
+        private var isInitialized = false
+
+        fun initNewPipe(context: Context, force: Boolean = false) {
+            if (!isInitialized || force) {
+                synchronized(this) {
+                    if (!isInitialized || force) {
+                        val sp = PreferenceManager.getDefaultSharedPreferences(context)
+                        val country = sp.getString("locale", "")!!.ifEmpty { "US" }
+                        val lang = sp.getString("app_language", "")!!.ifEmpty { "en" }
+                        val useLang = sp.getBoolean("use_app_language_for_metadata", false)
+                        val downloader = NewPipeDownloaderImpl(sharedClient)
+                        if (useLang) {
+                            NewPipe.init(downloader, Localization(lang, country))
+                        } else {
+                            NewPipe.init(downloader)
+                        }
+                        YoutubeStreamExtractor.setPoTokenProvider(NewPipePoTokenGenerator())
+                        isInitialized = true
+                    }
+                }
+            }
+        }
     }
 
     fun getVideoData(url : String) : Result<List<ResultItem>> {
         try {
             val streamInfo = StreamInfo.getInfo(url)
-            val vid = createVideoFromStream(streamInfo, url) ?: return Result.failure(Throwable())
+            val vid = createVideoFromStream(streamInfo, url, true) ?: return Result.failure(Throwable())
             return Result.success(listOf(vid))
         }catch (e: Exception) {
             return Result.failure(e)
@@ -266,30 +297,107 @@ class NewPipeUtil(context: Context) {
     }
 
 
-    fun getTrending(): ArrayList<ResultItem> {
+    suspend fun getTrending(forceRefresh: Boolean = false): ArrayList<ResultItem> = coroutineScope {
         try {
-            val items = arrayListOf<ResultItem>()
             val kioskList = NewPipe.getService(ServiceList.YouTube.serviceId).kioskList
             kioskList.forceContentCountry(ContentCountry(countryCode))
 
-            val extractor = kioskList.getExtractorById("trending_music", null)
-            extractor.fetchPage()
+            val kioskIds = listOf(
+                "trending_gaming",
+                "trending_music",
+                "trending_movies_and_shows",
+                "trending_podcasts_episodes",
+                "live"
+            )
 
-            val info = KioskInfo.getInfo(extractor)
-            if (info.relatedItems.isEmpty()) return arrayListOf()
+            // If forceRefresh is true or cache is empty, fetch kiosks in parallel
+            if (forceRefresh || kioskCache.isEmpty()) {
+                val deferredList = kioskIds.map { kioskId ->
+                    async(Dispatchers.IO) {
+                        try {
+                            val extractor = kioskList.getExtractorById(kioskId, null)
+                            extractor.fetchPage()
+                            val info = KioskInfo.getInfo(extractor)
+                            val items = ArrayList<ResultItem>()
+                            for (element in info.relatedItems) {
+                                if (element is StreamInfoItem) {
+                                    if (element.duration <= 0) continue
+                                    val v = createVideoFromStreamInfoItem(element, element.url) ?: continue
+                                    items.add(v)
+                                }
+                            }
+                            kioskId to items
+                        } catch (e: Exception) {
+                            Log.w("NewPipeUtil", "Kiosk $kioskId fetch error: ${e.message}")
+                            kioskId to emptyList<ResultItem>()
+                        }
+                    }
+                }
 
-            for (i in 0 until info.relatedItems.size) {
-                val element = info.relatedItems[i]
-                if (element is StreamInfoItem) {
-                    if (element.duration <= 0) continue
-                    val v = createVideoFromStreamInfoItem(element, element.url) ?: continue
-                    items.add(v)
+                val searchDeferred = async(Dispatchers.IO) {
+                    val topics = listOf("trending", "viral", "top videos", "popular", "entertainment", "explore")
+                    val query = topics.random()
+                    try {
+                        val searchRes = search(query).getOrDefault(arrayListOf())
+                        "search_$query" to searchRes.toList()
+                    } catch (e: Exception) {
+                        "search" to emptyList<ResultItem>()
+                    }
+                }
+
+                val allResults = deferredList.awaitAll().toMutableList()
+                val searchResult = searchDeferred.await()
+                if (searchResult.second.isNotEmpty()) {
+                    allResults.add(searchResult)
+                }
+
+                for ((kioskId, items) in allResults) {
+                    if (items.isNotEmpty()) {
+                        kioskCache[kioskId] = items
+                    }
                 }
             }
 
-            return items
-        }catch (err: Exception) {
-            return arrayListOf()
+            if (kioskCache.isEmpty()) return@coroutineScope arrayListOf()
+
+            // Filter by unseen items to guarantee fresh videos on each refresh
+            val candidatesByKiosk = kioskCache.mapValues { (_, items) ->
+                val unseen = items.filter { it.url !in recentlyShownUrls }
+                (if (unseen.size >= 4) unseen else items).shuffled().toMutableList()
+            }.toMutableMap()
+
+            val selectedItems = ArrayList<ResultItem>()
+            val selectedUrls = HashSet<String>()
+            val categoryKeys = candidatesByKiosk.keys.shuffled().toMutableList()
+
+            // Round-robin interleaving so all categories are well-represented
+            var addedAny = true
+            while (selectedItems.size < 40 && addedAny) {
+                addedAny = false
+                for (catKey in categoryKeys) {
+                    val list = candidatesByKiosk[catKey]
+                    while (!list.isNullOrEmpty() && selectedItems.size < 40) {
+                        val item = list.removeAt(0)
+                        if (selectedUrls.add(item.url)) {
+                            selectedItems.add(item)
+                            recentlyShownUrls.add(item.url)
+                            addedAny = true
+                            break
+                        }
+                    }
+                }
+            }
+
+            // Cap the size of recentlyShownUrls to prevent unbounded growth
+            if (recentlyShownUrls.size > 300) {
+                val toRemove = recentlyShownUrls.take(recentlyShownUrls.size - 150)
+                recentlyShownUrls.removeAll(toRemove.toSet())
+            }
+
+            return@coroutineScope selectedItems
+        } catch (err: Exception) {
+            Log.e("NewPipeUtil", "getTrending error: ${err.message}", err)
+            return@coroutineScope arrayListOf()
         }
     }
 
@@ -332,7 +440,7 @@ class NewPipeUtil(context: Context) {
             val formats : ArrayList<Format> = ArrayList()
 
 
-            if(sharedPreferences.getString("formats_source", "yt-dlp") == "newpipe" || ignoreFormatPreference){
+            if(sharedPreferences.getString("formats_source", "newpipe") != "yt-dlp" || ignoreFormatPreference){
                 if (stream.audioStreams.isNotEmpty()){
                     stream.audioStreams = stream.audioStreams.sortedByDescending { it.bitrate }
                     for (f in 0 until stream.audioStreams.size){

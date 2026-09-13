@@ -47,7 +47,7 @@ class ResultRepository(private val resultDao: ResultDao, commandTemplateDao: Com
         YT_DLP
     }
 
-    private fun isUsingNewPipeExtractorDataFetching() = sharedPreferences.getString("youtube_data_fetching_extractor", "YT_DLP") == "NEWPIPE"
+    private fun isUsingNewPipeExtractorDataFetching() = sharedPreferences.getString("youtube_data_fetching_extractor", "NEWPIPE") != "YT_DLP"
 
     suspend fun insert(it: ResultItem){
         resultDao.insert(it)
@@ -61,11 +61,13 @@ class ResultRepository(private val resultDao: ResultDao, commandTemplateDao: Com
         return resultDao.getFilteredListIds(playlistTitle)
     }
 
-    suspend fun getHomeRecommendations(){
-        deleteAll()
-        val category = sharedPreferences.getString("recommendations_home", "")
+    suspend fun getHomeRecommendations(force: Boolean = false){
+        var category = sharedPreferences.getString("recommendations_home", "")
+        if (force && (category.isNullOrBlank() || (category == "custom" && sharedPreferences.getString("custom_home_recommendation_url", "").isNullOrBlank()))) {
+            category = "newpipe"
+        }
         val items = when(category) {
-            "newpipe" -> newPipeUtil.getTrending()
+            "newpipe" -> newPipeUtil.getTrending(forceRefresh = force)
             "yt_api" -> youtubeApiUtil.getTrending()
             "yt_dlp_watch_later" -> ytdlpUtil.getYoutubeWatchLater()
             "yt_dlp_recommendations" -> ytdlpUtil.getYoutubeRecommendations()
@@ -79,6 +81,7 @@ class ResultRepository(private val resultDao: ResultDao, commandTemplateDao: Com
             else -> arrayListOf()
         }
 
+        deleteAll()
         itemCount.value = items.size
         currentCoroutineContext().ensureActive()
         resultDao.insertMultiple(items)
@@ -89,18 +92,17 @@ class ResultRepository(private val resultDao: ResultDao, commandTemplateDao: Com
     }
 
     fun getStreamingUrlAndChapters(url: String) : Pair<List<String>, List<ChapterItem>?> {
-//        val newPipeTrial = if (isUsingNewPipeExtractorDataFetching()) {
-//            newPipeUtil.getStreamingUrlAndChapters(url)
-//        }else {
-//            Result.failure(Throwable())
-//        }
-//        if (newPipeTrial.isFailure){
-//            val res = ytdlpUtil.getStreamingUrlAndChapters(url)
-//            return res.getOrDefault(Pair(listOf(""), null))
-//        }
+        val newPipeTrial = if (isUsingNewPipeExtractorDataFetching()) {
+            newPipeUtil.getStreamingUrlAndChapters(url)
+        }else {
+            Result.failure(Throwable())
+        }
+        if (newPipeTrial.isFailure){
+            val res = ytdlpUtil.getStreamingUrlAndChapters(url)
+            return res.getOrDefault(Pair(listOf(""), null))
+        }
 
-        return ytdlpUtil.getStreamingUrlAndChapters(url)
-            .getOrDefault(Pair(listOf(""), null))
+        return newPipeTrial.getOrDefault(Pair(listOf(""), null))
     }
 
     suspend fun search(inputQuery: String, resetResults: Boolean, addToResults: Boolean) : List<ResultItem>{
@@ -313,7 +315,7 @@ class ResultRepository(private val resultDao: ResultDao, commandTemplateDao: Com
     }
 
     fun getFormats(url: String, source : String? = null) : List<Format> {
-        val formatSource = source ?: sharedPreferences.getString("formats_source", "yt-dlp")
+        val formatSource = source ?: sharedPreferences.getString("formats_source", "newpipe")
         val res = if (url.isYoutubeURL()) {
             when(formatSource) {
                 "newpipe" -> {
@@ -338,7 +340,7 @@ class ResultRepository(private val resultDao: ResultDao, commandTemplateDao: Com
     }
 
     suspend fun getFormatsMultiple(urls: List<String>, source: String? = null, progress: (progress: ResultViewModel.MultipleFormatProgress) -> Unit) : MutableList<MutableList<Format>> {
-        val formatSource = source ?: sharedPreferences.getString("formats_source", "yt-dlp")
+        val formatSource = source ?: sharedPreferences.getString("formats_source", "newpipe")
         val allYoutubeLinks = urls.all { it.isYoutubeURL() }
 
         val res = when(formatSource) {

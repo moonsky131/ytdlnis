@@ -87,6 +87,38 @@ class ResultRepository(private val resultDao: ResultDao, commandTemplateDao: Com
         resultDao.insertMultiple(items)
     }
 
+    val isLoadingMore = MutableStateFlow(false)
+
+    suspend fun loadMoreHomeRecommendations(): Boolean {
+        if (isLoadingMore.value) return false
+        isLoadingMore.value = true
+        return try {
+            var category = sharedPreferences.getString("recommendations_home", "")
+            if (category.isNullOrBlank() || (category == "custom" && sharedPreferences.getString("custom_home_recommendation_url", "").isNullOrBlank())) {
+                category = "newpipe"
+            }
+            val items = when(category) {
+                "newpipe" -> newPipeUtil.getTrending(forceRefresh = false)
+                "yt_api" -> youtubeApiUtil.getTrending()
+                else -> arrayListOf()
+            }
+
+            if (items.isEmpty()) return false
+
+            currentCoroutineContext().ensureActive()
+            val insertedIds = resultDao.insertMultipleNoDuplicates(items)
+            if (insertedIds.isNotEmpty()) {
+                itemCount.value = resultDao.getCountInt()
+            }
+            insertedIds.isNotEmpty()
+        } catch (e: Exception) {
+            android.util.Log.e("ResultRepository", "loadMoreHomeRecommendations error: ${e.message}", e)
+            false
+        } finally {
+            isLoadingMore.value = false
+        }
+    }
+
     fun getSearchSuggestions(searchQuery: String) : ArrayList<String> {
         return GoogleApiUtil.getSearchSuggestions(searchQuery)
     }

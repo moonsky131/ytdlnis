@@ -172,6 +172,10 @@ class ResultViewModel(private val application: Application) : AndroidViewModel(a
         }
     }
 
+    fun loadMoreHomeRecommendations() = viewModelScope.launch(Dispatchers.IO) {
+        repository.loadMoreHomeRecommendations()
+    }
+
     fun cancelParsingQueries(){
         parsingQueries?.cancel()
         parsingQueriesJobList.forEach { it.cancel() }

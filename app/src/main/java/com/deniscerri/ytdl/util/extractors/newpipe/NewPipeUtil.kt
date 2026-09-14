@@ -310,8 +310,13 @@ class NewPipeUtil(context: Context) {
                 "live"
             )
 
-            // If forceRefresh is true or cache is empty, fetch kiosks in parallel
-            if (forceRefresh || kioskCache.isEmpty()) {
+            if (forceRefresh) {
+                kioskCache.clear()
+            }
+
+            val totalUnseen = kioskCache.values.sumOf { items -> items.count { it.url !in recentlyShownUrls } }
+            // If forceRefresh is true, cache is empty, or unseen candidate items are running low, fetch kiosks in parallel
+            if (forceRefresh || kioskCache.isEmpty() || totalUnseen < 35) {
                 val deferredList = kioskIds.map { kioskId ->
                     async(Dispatchers.IO) {
                         try {
@@ -335,7 +340,11 @@ class NewPipeUtil(context: Context) {
                 }
 
                 val searchDeferred = async(Dispatchers.IO) {
-                    val topics = listOf("trending", "viral", "top videos", "popular", "entertainment", "explore")
+                    val topics = listOf(
+                        "trending", "viral", "top videos", "popular", "entertainment",
+                        "explore", "music hits", "gaming highlights", "new releases",
+                        "interviews", "podcasts", "shorts", "top news"
+                    )
                     val query = topics.random()
                     try {
                         val searchRes = search(query).getOrDefault(arrayListOf())
@@ -353,14 +362,15 @@ class NewPipeUtil(context: Context) {
 
                 for ((kioskId, items) in allResults) {
                     if (items.isNotEmpty()) {
-                        kioskCache[kioskId] = items
+                        val existing = kioskCache[kioskId] ?: emptyList()
+                        kioskCache[kioskId] = (existing + items).distinctBy { it.url }
                     }
                 }
             }
 
             if (kioskCache.isEmpty()) return@coroutineScope arrayListOf()
 
-            // Filter by unseen items to guarantee fresh videos on each refresh
+            // Filter by unseen items to guarantee fresh videos on each refresh / scroll
             val candidatesByKiosk = kioskCache.mapValues { (_, items) ->
                 val unseen = items.filter { it.url !in recentlyShownUrls }
                 (if (unseen.size >= 4) unseen else items).shuffled().toMutableList()
@@ -389,8 +399,8 @@ class NewPipeUtil(context: Context) {
             }
 
             // Cap the size of recentlyShownUrls to prevent unbounded growth
-            if (recentlyShownUrls.size > 300) {
-                val toRemove = recentlyShownUrls.take(recentlyShownUrls.size - 150)
+            if (recentlyShownUrls.size > 600) {
+                val toRemove = recentlyShownUrls.take(recentlyShownUrls.size - 300)
                 recentlyShownUrls.removeAll(toRemove.toSet())
             }
 

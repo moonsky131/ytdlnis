@@ -187,6 +187,22 @@ class HomeFragment : Fragment(), HomeAdapter.OnItemClickListener, SearchSuggesti
         recyclerView?.layoutManager = GridLayoutManager(context, resources.getInteger(R.integer.grid_size))
         recyclerView?.adapter = homeAdapter
         recyclerView?.enableFastScroll()
+        recyclerView?.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                if (dy <= 0) return
+
+                if (queryList.isNotEmpty() || !searchBar?.text.isNullOrBlank()) return
+
+                val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                val totalItemCount = layoutManager.itemCount
+                val lastVisibleItem = layoutManager.findLastVisibleItemPosition()
+
+                if (totalItemCount > 0 && lastVisibleItem >= totalItemCount - 8) {
+                    resultViewModel.loadMoreHomeRecommendations()
+                }
+            }
+        })
 
         shimmerCards = view.findViewById(R.id.shimmer_results_framelayout)
 

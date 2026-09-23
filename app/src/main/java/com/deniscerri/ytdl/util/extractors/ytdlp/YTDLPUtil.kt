@@ -1039,7 +1039,9 @@ class YTDLPUtil(private val context: Context, private val commandTemplateDao: Co
 
             if (downloadItem.SaveThumb) {
                 request.addOption("--write-thumbnail")
-                request.addOption("--convert-thumbnails", thumbnailFormat!!)
+                if (downloadItem.type != DownloadType.audio) {
+                    request.addOption("--convert-thumbnails", thumbnailFormat!!)
+                }
             }
             if (!sharedPreferences.getBoolean("mtime", false)){
                 request.addOption("--no-mtime")
@@ -1285,11 +1287,16 @@ class YTDLPUtil(private val context: Context, private val commandTemplateDao: Co
                     if (downloadItem.audioPreferences.embedThumb) {
                         metadataCommands.addOption("--embed-thumbnail")
                     }
-                    if (!request.toString().contains("--convert-thumbnails")) metadataCommands.addOption("--convert-thumbnails", thumbnailFormat!!)
+                    val audioConvertFormat = if (cropThumb) {
+                        if (thumbnailFormat == "png") "png>jpg/jpg>png/webp>png" else "jpg>png/png>jpg/webp>jpg"
+                    } else {
+                        thumbnailFormat!!
+                    }
+                    metadataCommands.addOption("--convert-thumbnails", audioConvertFormat)
 
                     val audioThumbStyle = sharedPreferences.getString("audio_thumbnail_style", "bars")
                     val squareFilter = if (audioThumbStyle == "crop") {
-                        """crop=\'if(gt(ih\,iw)\,iw\,ih)\':\'if(gt(iw\,ih)\,ih\,iw)\'"""
+                        """crop=min(iw\,ih):min(iw\,ih)"""
                     } else {
                         """pad=max(iw\,ih):max(iw\,ih):(ow-iw)/2:(oh-ih)/2:black"""
                     }

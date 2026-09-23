@@ -271,9 +271,9 @@ class DownloadViewModel(private val application: Application) : AndroidViewModel
         val alsoDownloadAudio = sharedPreferences.getBoolean("also_download_audio", false)
         val addChapters = sharedPreferences.getBoolean("add_chapters", false)
         val saveThumb = sharedPreferences.getBoolean("write_thumbnail", false)
-        val embedThumb = sharedPreferences.getBoolean("embed_thumbnail", false)
+        val embedThumb = sharedPreferences.getBoolean("embed_thumbnail", true)
         val videoEmbedThumb = sharedPreferences.getBoolean("video_embed_thumbnail", false)
-        val cropThumb = sharedPreferences.getBoolean("crop_thumbnail", false)
+        val cropThumb = sharedPreferences.getBoolean("crop_thumbnail", true)
 
         var type = getDownloadType(givenType, resultItem.url)
         if(type == DownloadType.command && commandTemplateDao.getTotalNumber() == 0) type = DownloadType.video
@@ -464,8 +464,8 @@ class DownloadViewModel(private val application: Application) : AndroidViewModel
         val alsoDownloadAudio = sharedPreferences.getBoolean("also_download_audio", false)
         val addChapters = sharedPreferences.getBoolean("add_chapters", false)
         val saveThumb = sharedPreferences.getBoolean("write_thumbnail", false)
-        val embedThumb = sharedPreferences.getBoolean("embed_thumbnail", false)
-        val cropThumb = sharedPreferences.getBoolean("crop_thumbnail", false)
+        val embedThumb = sharedPreferences.getBoolean("embed_thumbnail", true)
+        val cropThumb = sharedPreferences.getBoolean("crop_thumbnail", true)
         val subsLanguages = sharedPreferences.getString("subs_lang", "en.*,.*-orig")!!
 
         var customFileNameTemplate = when(historyItem.type) {

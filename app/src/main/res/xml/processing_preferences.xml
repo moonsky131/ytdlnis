@@ -93,6 +93,15 @@
             app:summary="@string/crop_thumb_summary"
             app:title="@string/crop_thumb" />
 
+        <ListPreference
+            android:defaultValue="bars"
+            android:entries="@array/audio_thumbnail_style_entries"
+            android:entryValues="@array/audio_thumbnail_style_values"
+            android:icon="@drawable/ic_image"
+            app:key="audio_thumbnail_style"
+            app:useSimpleSummaryProvider="true"
+            app:title="@string/audio_thumbnail_style" />
+
         <SwitchPreferenceCompat
             android:widgetLayout="@layout/preferece_material_switch"
             app:defaultValue="true"

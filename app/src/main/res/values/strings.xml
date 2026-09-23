@@ -272,8 +272,11 @@
     <string name="general">General</string>
     <string name="swipe_gestures">Swipe gestures</string>
     <string name="swipe_gestures_summary">Swipe items for certain actions</string>
-    <string name="crop_thumb">Crop thumbnail</string>
-    <string name="crop_thumb_summary">Crop the thumbnail into a square for audio downloads</string>
+    <string name="crop_thumb">Square album artwork</string>
+    <string name="crop_thumb_summary">Fit thumbnail into a square for audio downloads</string>
+    <string name="audio_thumbnail_style">Audio cover art style</string>
+    <string name="audio_thumb_style_bars">Cinematic Black Bars (Full uncropped)</string>
+    <string name="audio_thumb_style_crop">Crop to fill square</string>
     <string name="audio_only_item">This item only contains audio formats</string>
     <string name="move_temporary_files">Move temporary files</string>
     <string name="move_temporary_files_summary">Transfer cached download files to the downloads folder</string>

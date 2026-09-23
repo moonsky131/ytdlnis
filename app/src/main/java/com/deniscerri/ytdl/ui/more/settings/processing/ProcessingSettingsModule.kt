@@ -131,12 +131,22 @@ object ProcessingSettingsModule : SettingModule {
             "embed_thumbnail" -> {
                 pref.setOnPreferenceChangeListener { _, newValue ->
                     host.findPref("crop_thumbnail")?.isEnabled = newValue as Boolean
+                    host.findPref("audio_thumbnail_style")?.isEnabled = (newValue as Boolean) && prefs.getBoolean("crop_thumbnail", true)
                     host.refreshUI()
                     true
                 }
             }
             "crop_thumbnail" -> {
-                pref.isEnabled = prefs.getBoolean("embed_thumbnail", true)
+                val embedThumb = prefs.getBoolean("embed_thumbnail", true)
+                pref.isEnabled = embedThumb
+                pref.setOnPreferenceChangeListener { _, newValue ->
+                    host.findPref("audio_thumbnail_style")?.isEnabled = embedThumb && (newValue as Boolean)
+                    host.refreshUI()
+                    true
+                }
+            }
+            "audio_thumbnail_style" -> {
+                pref.isEnabled = prefs.getBoolean("embed_thumbnail", true) && prefs.getBoolean("crop_thumbnail", true)
             }
             "audio_codec" -> {
                 updateCompatibleVideoConfig(host, prefs)

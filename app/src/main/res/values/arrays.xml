@@ -1460,6 +1460,16 @@
         <item>jpg</item>
     </array>
 
+    <string-array name="audio_thumbnail_style_entries">
+        <item>@string/audio_thumb_style_bars</item>
+        <item>@string/audio_thumb_style_crop</item>
+    </string-array>
+
+    <string-array name="audio_thumbnail_style_values">
+        <item>bars</item>
+        <item>crop</item>
+    </string-array>
+
     <string-array name="prevent_duplicate_downloads">
         <item>@string/disabled</item>
         <item>@string/archive</item>

@@ -1280,21 +1280,24 @@ class YTDLPUtil(private val context: Context, private val commandTemplateDao: Co
                         metadataCommands.addOption("--embed-thumbnail")
                         if (!request.toString().contains("--convert-thumbnails")) metadataCommands.addOption("--convert-thumbnails", thumbnailFormat!!)
 
-                        val thumbnailConfig = StringBuilder("")
-                        val cropConfig = """-vf crop=\"'if(gt(ih,iw),iw,ih)':'if(gt(iw,ih),ih,iw)'\"""""
-                        if (thumbnailFormat == "jpg")  thumbnailConfig.append("""--ppa "ThumbnailsConvertor:-qmin 1 -q:v 1"""")
-                        if (cropThumb){
-                            if (thumbnailFormat == "jpg") {
-                                thumbnailConfig.deleteCharAt(thumbnailConfig.length - 1)
-                                thumbnailConfig.append(""" $cropConfig""")
-                            }
-                            else thumbnailConfig.append("""--ppa "ThumbnailsConvertor:$cropConfig""")
+                        val audioThumbStyle = sharedPreferences.getString("audio_thumbnail_style", "bars")
+                        val squareFilter = if (audioThumbStyle == "crop") {
+                            """crop=\'if(gt(ih\,iw)\,iw\,ih)\':\'if(gt(iw\,ih)\,ih\,iw)\'"""
+                        } else {
+                            """pad=max(iw\,ih):max(iw\,ih):(ow-iw)/2:(oh-ih)/2:black"""
                         }
 
-                        if (thumbnailConfig.isNotBlank()){
-                            request.addOption(thumbnailConfig.toString())
+                        val ppaParts = mutableListOf<String>()
+                        if (thumbnailFormat == "jpg") {
+                            ppaParts.add("-qmin 1 -q:v 1")
+                        }
+                        if (cropThumb) {
+                            ppaParts.add("-vf \"$squareFilter\"")
                         }
 
+                        if (ppaParts.isNotEmpty()) {
+                            request.addOption("--ppa", "ThumbnailsConvertor:${ppaParts.joinToString(" ")}")
+                        }
                     }
 
                     if (filenameTemplate.isNotBlank()){

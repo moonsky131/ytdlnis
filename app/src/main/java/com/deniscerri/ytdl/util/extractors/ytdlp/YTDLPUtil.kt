@@ -1242,66 +1242,68 @@ class YTDLPUtil(private val context: Context, private val commandTemplateDao: Co
                     request.addOption("--split-chapters")
                     request.addOption("-o", "chapter:%(section_number)d - %(section_title)s.%(ext)s")
                 }else{
-                    if (embedMetadata){
-                        metadataCommands.addOption("--embed-metadata")
-
-                        val emptyAuthor = downloadItem.author.isEmpty()
-                        val usePlaylistMetadata = sharedPreferences.getBoolean("playlist_as_album", true)
-
-                        if (emptyAuthor) {
-                            if (usePlaylistMetadata) {
-                                metadataCommands.addOption("--parse-metadata", "%(playlist_uploader,artist,uploader|)s:^(?P<first_artist>.*?)(?:(?=,\\s+)|$)")
-                            }else{
-                                metadataCommands.addOption("--parse-metadata", "%(artist,uploader|)s:^(?P<first_artist>.*?)(?:(?=,\\s+)|$)")
-                            }
-                        }else{
-                            if (usePlaylistMetadata) {
-                                metadataCommands.addOption("--parse-metadata", "%(playlist_uploader,artist|)s:^(?P<first_artist>.*?)(?:(?=,\\s+)|$)")
-                            }else{
-                                metadataCommands.addOption("--parse-metadata", "%(artist|)s:^(?P<first_artist>.*?)(?:(?=,\\s+)|$)")
-                            }
-                        }
-
-                        if (usePlaylistMetadata) {
-                            metadataCommands.addOption("--parse-metadata", "%(album,playlist_title,playlist|)s:%(meta_album)s")
-                        }
-
-
-                        metadataCommands.addOption("--parse-metadata", "%(album_artist,first_artist|)s:%(album_artist)s")
-                        metadataCommands.addOption("--parse-metadata", "%(release_year,release_date>%Y,upload_date>%Y)s:(?P<meta_date>\\d+)")
-
-                        if (isPlaylistItem) {
-                            metadataCommands.addOption("--parse-metadata", "%(track_number,playlist_index)d:(?P<track_number>\\d+)")
-                        }
-                    }
-
-                    val cropThumb = downloadItem.audioPreferences.cropThumb ?: sharedPreferences.getBoolean("crop_thumbnail", true)
-                    if (downloadItem.audioPreferences.embedThumb){
-                        metadataCommands.addOption("--embed-thumbnail")
-                        if (!request.toString().contains("--convert-thumbnails")) metadataCommands.addOption("--convert-thumbnails", thumbnailFormat!!)
-
-                        val audioThumbStyle = sharedPreferences.getString("audio_thumbnail_style", "bars")
-                        val squareFilter = if (audioThumbStyle == "crop") {
-                            """crop=\'if(gt(ih\,iw)\,iw\,ih)\':\'if(gt(iw\,ih)\,ih\,iw)\'"""
-                        } else {
-                            """pad=max(iw\,ih):max(iw\,ih):(ow-iw)/2:(oh-ih)/2:black"""
-                        }
-
-                        val ppaParts = mutableListOf<String>()
-                        if (thumbnailFormat == "jpg") {
-                            ppaParts.add("-qmin 1 -q:v 1")
-                        }
-                        if (cropThumb) {
-                            ppaParts.add("-vf \"$squareFilter\"")
-                        }
-
-                        if (ppaParts.isNotEmpty()) {
-                            request.addOption("--ppa", "ThumbnailsConvertor:${ppaParts.joinToString(" ")}")
-                        }
-                    }
-
                     if (filenameTemplate.isNotBlank()){
                         request.addOption("-o", "${filenameTemplate.removeSuffix(".%(ext)s")}.%(ext)s")
+                    }
+                }
+
+                if (embedMetadata){
+                    metadataCommands.addOption("--embed-metadata")
+
+                    val emptyAuthor = downloadItem.author.isEmpty()
+                    val usePlaylistMetadata = sharedPreferences.getBoolean("playlist_as_album", true)
+
+                    if (emptyAuthor) {
+                        if (usePlaylistMetadata) {
+                            metadataCommands.addOption("--parse-metadata", "%(playlist_uploader,artist,uploader|)s:^(?P<first_artist>.*?)(?:(?=,\\s+)|$)")
+                        }else{
+                            metadataCommands.addOption("--parse-metadata", "%(artist,uploader|)s:^(?P<first_artist>.*?)(?:(?=,\\s+)|$)")
+                        }
+                    }else{
+                        if (usePlaylistMetadata) {
+                            metadataCommands.addOption("--parse-metadata", "%(playlist_uploader,artist|)s:^(?P<first_artist>.*?)(?:(?=,\\s+)|$)")
+                        }else{
+                            metadataCommands.addOption("--parse-metadata", "%(artist|)s:^(?P<first_artist>.*?)(?:(?=,\\s+)|$)")
+                        }
+                    }
+
+                    if (usePlaylistMetadata) {
+                        metadataCommands.addOption("--parse-metadata", "%(album,playlist_title,playlist|)s:%(meta_album)s")
+                    }
+
+
+                    metadataCommands.addOption("--parse-metadata", "%(album_artist,first_artist|)s:%(album_artist)s")
+                    metadataCommands.addOption("--parse-metadata", "%(release_year,release_date>%Y,upload_date>%Y)s:(?P<meta_date>\\d+)")
+
+                    if (isPlaylistItem) {
+                        metadataCommands.addOption("--parse-metadata", "%(track_number,playlist_index)d:(?P<track_number>\\d+)")
+                    }
+                }
+
+                val cropThumb = downloadItem.audioPreferences.cropThumb ?: sharedPreferences.getBoolean("crop_thumbnail", true)
+                if (downloadItem.audioPreferences.embedThumb || downloadItem.SaveThumb){
+                    if (downloadItem.audioPreferences.embedThumb) {
+                        metadataCommands.addOption("--embed-thumbnail")
+                    }
+                    if (!request.toString().contains("--convert-thumbnails")) metadataCommands.addOption("--convert-thumbnails", thumbnailFormat!!)
+
+                    val audioThumbStyle = sharedPreferences.getString("audio_thumbnail_style", "bars")
+                    val squareFilter = if (audioThumbStyle == "crop") {
+                        """crop=\'if(gt(ih\,iw)\,iw\,ih)\':\'if(gt(iw\,ih)\,ih\,iw)\'"""
+                    } else {
+                        """pad=max(iw\,ih):max(iw\,ih):(ow-iw)/2:(oh-ih)/2:black"""
+                    }
+
+                    val ppaParts = mutableListOf<String>()
+                    if (thumbnailFormat == "jpg") {
+                        ppaParts.add("-qmin 1 -q:v 1")
+                    }
+                    if (cropThumb) {
+                        ppaParts.add("-vf \"$squareFilter\"")
+                    }
+
+                    if (ppaParts.isNotEmpty()) {
+                        request.addOption("--ppa", "ThumbnailsConvertor:${ppaParts.joinToString(" ")}")
                     }
                 }
 

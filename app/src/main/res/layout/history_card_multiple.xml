@@ -51,7 +51,8 @@
                 <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/downloads_image_view"
                     android:adjustViewBounds="true"
-                    android:scaleType="centerCrop"
+                    android:background="@android:color/black"
+                    android:scaleType="fitCenter"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
 
